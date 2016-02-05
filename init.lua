@@ -11,6 +11,8 @@ time_reg.version = "00.01.00"
 time_reg.author = "Mg/LeMagnesium"
 
 -- Definitions
+time_reg.enabled = not (minetest.setting_getbool("disable_time_regulation") or false)
+
 time_reg.time_speed = 72
 
 time_reg.loop_interval = 0
@@ -157,7 +159,10 @@ function time_reg.loop(loop)
 end
 
 time_reg.update_constants()
-time_reg.start_loop()
+
+if time_reg.enabled then
+    time_reg.start_loop()
+end
 
 -- chatcommand
 minetest.register_chatcommand("time_reg", {
@@ -206,3 +211,6 @@ log("\tNight: " .. time_reg.ratio.night .. "%")
 log("Applied time speeds:")
 log("\tDay: " .. time_reg.day_time_speed)
 log("\tNight: " .. time_reg.night_time_speed)
+if not time_reg.enabled then
+    log("Time Regulation is disabled by default. Use /time_reg start to start it")
+end
