@@ -2,4 +2,4 @@ Time Regulation
 ===============
 
 By Mg/LeMagnesium
-License: CC0
+License: WTFPL

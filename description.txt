@@ -1,0 +1,1 @@
+This mod allows admins to set up different relative durations for day and night in a day cycle.

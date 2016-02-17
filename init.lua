@@ -1,14 +1,15 @@
 --------------------
 -- Time Regulation
 -- By Mg/LeMagnesium
--- License: CC0
+-- License: WTFPL
 -- Last modification :
+-- 02/17/16 @ 07:33PM GMT+1 (Mg)
 --
 
 -- Namespace first, with basic informations
 time_reg = {}
-time_reg.version = "00.01.04"
-time_reg.author = "Mg/LeMagnesium"
+time_reg.version = "00.01.10"
+time_reg.authors = {"Mg/LeMagnesium"}
 
 -- Definitions
 time_reg.enabled = not (minetest.setting_getbool("disable_time_regulation") or false)
@@ -231,7 +232,7 @@ minetest.register_chatcommand("time_reg", {
 -- Startup informations
 local function log(x) minetest.log("action", "[TimeRegulation] " .. (x or "")) end
 
-log("Thank you for using TimeRegulation v" .. time_reg.version .. " by " .. time_reg.author)
+log("Thank you for using TimeRegulation v" .. time_reg.version .. " by " .. table.concat(time_reg.authors, ", "))
 log("Status: " .. time_reg.status)
 log("Absolute Time Speed: " .. time_reg.time_speed)
 log("Duration: " .. time_reg.duration)
