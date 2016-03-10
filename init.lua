@@ -145,7 +145,7 @@ function time_reg.loop(loop, forceupdate)
                                 minetest.set_timeofday(time_reg.threshold.day / 24000)
                                 minetest.log("action", "[TimeRegulation] Entering night period : period skipped")
                         else
-                                minetest.setting_set("tims_speed", time_reg.night_time_speed)
+                                minetest.setting_set("time_speed", time_reg.night_time_speed)
                                 minetest.log("action", "[TimeRegulation] Entering night period : time_speed " .. time_reg.night_time_speed)
                         end
                 end
