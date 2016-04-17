@@ -8,11 +8,15 @@
 
 -- Namespace first, with basic informations
 time_reg = {}
-time_reg.version = "00.01.10"
+time_reg.version = "00.01.15"
 time_reg.authors = {"Mg/LeMagnesium"}
 
 -- Definitions
 time_reg.enabled = not (minetest.setting_getbool("disable_time_regulation") or false)
+time_reg.seasons_mode = minetest.setting_getbool("seasonal_time_regulation") or false
+time_reg.offset = 0.2
+
+time_reg.day_of_year = tonumber(os.date("%j"))
 
 time_reg.time_speed = 72
 
@@ -27,12 +31,12 @@ time_reg.moment = ""
 time_reg.duration = 1440 / time_reg.time_speed
 time_reg.day_time_speed = 0
 time_reg.night_time_speed = 0
-
 --[[ Status :
     0: Dead
     1: Idle
     2: Active
 ]]
+
 time_reg.status = 2
 
 time_reg.ratio = { -- Expressed in percent
@@ -78,8 +82,20 @@ function time_reg.do_calculation()
         time_reg.night_time_speed = 1440 / (night_htime * 2)
 end
 
+function time_reg.seasonal_calculation()
+        local year = tonumber(os.date("%Y"))
+        local nbdays = 365
+        if (year % 4) == 0 and not (year % 1000) ~= 0 then
+                nbdays = 366
+        end
+        time_reg.ratio.night = ((math.cos((time_reg.day_of_year / 1) * 2 * math.pi) * time_reg.offset) / 2.0) + 0.5
+        time_reg.ratio.day = 100 - time_reg.ratio.night
+
+        minetest.log("action", "[TimeRegulation] Seasonal calculation done")
+end
+
 function time_reg.update_constants()
-        time_reg.time_speed = minetest.setting_get("time_speed")
+        time_reg.time_speed = minetest.setting_get("time_speed") or time_reg.time_speed
         time_reg.do_calculation()
         if time_reg.status == 1 and time_reg.time_speed > 0 then
                 time_reg.set_status(2, "ACTIVE")
@@ -116,6 +132,14 @@ end
 function time_reg.loop(loop, forceupdate)
         -- Determine TOD and current moment
         local tod = minetest.get_timeofday() * 24000
+        local doy = tonumber(os.date("%j"))
+
+        if time_reg.seasons_mode then
+                if doy ~= time_reg.day_of_year then
+                        time_reg.seasonal_calculation()
+                end
+                time_reg.day_of_year = doy
+        end
 
         local moment = "day"
         if tod < time_reg.threshold.day or tod > time_reg.threshold.night then
@@ -195,16 +219,21 @@ minetest.register_chatcommand("time_reg", {
                                 return false, "Loop couldn't be started, it already is"
                         end
 
-                        elseif param:split(" ")[1] == "set" then
-                                local params = param:split(" ")
-                                if #params < 3 then
-                                        return false, "Not enough parameters. You need to enter 'set', a moment of the day ('night' or 'day') and a percentage (0 to 100)"
-                                elseif #params > 3 then
-                                        return false, "You entered too many parameters"
-                                end
+                elseif param:split(" ")[1] == "set" then
+                        local params = param:split(" ")
+                        if #params < 3 then
+                                return false, "Not enough parameters. You need to enter 'set', a moment of the day ('night' or 'day') and a percentage (0 to 100)"
+                        elseif #params > 3 then
+                                return false, "You entered too many parameters"
+                        end
+
                         local moment, perc = params[2], tonumber(params[3])
                         if not perc or perc < 0 or perc > 100 then
                                 return false, "Invalid percentage : " .. params[3]
+                        end
+
+                        if time_reg.seasons_mode then
+                                return false, "Season mode is enabled. Turn it off before changing the ratios (see /time_reg help)"
                         end
 
                         if moment == "day" then
@@ -223,6 +252,30 @@ minetest.register_chatcommand("time_reg", {
                         time_reg.loop(false, true)
                         return true, "Operation succeeded.\nRatio: " .. time_reg.ratio.day .. "% day and " .. time_reg.ratio.night .. "% night"
 
+                elseif param:split(" ")[1] == "seasons" then
+                        local params = param:split(" ")
+                        if #params ~= 2 then
+                                return false, "Invalid amount of parameters"
+                        end
+
+                        if params[2] == "on" then
+                                if time_reg.seasons_mode then
+                                        return true, "Seasonal ratio calculation is already on"
+                                else
+                                        time_reg.seasons_mode = true
+                                        return true, "Seasonal ratio calculation is on"
+                                end
+                        elseif params[2] == "off" then
+                                if time_reg.seasons_mode then
+                                        time_reg.seasons_mode = false
+                                        return true, "Seasonal ratio calculation is off"
+                                else
+                                        return true, "Seasonal ratio calculation is already off"
+                                end
+                        else
+                                return false, "Unknown state : " .. params[2] .. ". Use either 'on' or 'off'"
+                        end
+
                 else
                         return false, "Unknown subcommand: " .. param
                 end
@@ -237,12 +290,19 @@ log("Status: " .. time_reg.status)
 log("Absolute Time Speed: " .. time_reg.time_speed)
 log("Duration: " .. time_reg.duration)
 log("Loop interval: " .. time_reg.loop_interval .. "s")
+if time_reg.seasons_mode then
+        time_reg.seasonal_calculation()
+        log("Seasonal ratio calculation: on")
+else
+        log("Seasonal ratio calculation: off")
+end
 log("Ratio:")
 log("\tDay: " .. time_reg.ratio.day .. "%")
 log("\tNight: " .. time_reg.ratio.night .. "%")
 log("Applied time speeds:")
 log("\tDay: " .. time_reg.day_time_speed)
 log("\tNight: " .. time_reg.night_time_speed)
+
 if not time_reg.enabled then
         log("Time Regulation is disabled by default. Use /time_reg start to start it")
 end
