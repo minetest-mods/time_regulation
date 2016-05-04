@@ -8,17 +8,17 @@
 
 -- Namespace first, with basic informations
 time_reg = {}
-time_reg.version = "00.01.15"
+time_reg.version = "00.01.16"
 time_reg.authors = {"Mg/LeMagnesium"}
 
 -- Definitions
 time_reg.enabled = not (minetest.setting_getbool("disable_time_regulation") or false)
 time_reg.seasons_mode = minetest.setting_getbool("seasonal_time_regulation") or false
-time_reg.offset = 0.2
+time_reg.offset = 0.5
 
-time_reg.day_of_year = tonumber(os.date("%j"))
+time_reg.day_of_year = tonumber(os.date("%j")) -- Updated at first update_constants
 
-time_reg.time_speed = 72
+time_reg.time_speed = minetest.setting_get("time_speed") or 72
 
 time_reg.loop_interval = 0
 time_reg.loop_active = false
@@ -53,7 +53,7 @@ local old_settime_func = core.chatcommands["time"].func
 core.chatcommands["time"].func = function(...)
         local res, msg = old_settime_func(...)
                 if res and time_reg.status == 2 then
-                time_reg.do_calculation()
+                time_reg.update_constants()
                 time_reg.loop(false, true)
                 minetest.log("action", "[TimeRegulation] Settime override : updating regulation")
         end
@@ -64,9 +64,9 @@ local old_set_func = core.chatcommands["set"].func
 core.chatcommands["set"].func = function(...)
         local res, msg = old_set_func(...)
         if res and time_reg.status ~= 0 then
-                time_reg.update_constants()
-                time_reg.loop(false, true)
-                minetest.log("action", "[TimeRegulation] Set override : updating constants and regulation")
+	   time_reg.update_constants()
+	   time_reg.loop(false, true)
+	   minetest.log("action", "[TimeRegulation] Set override : updating constants and regulation")
         end
         return res, msg
 end
@@ -74,32 +74,43 @@ end
 
 -- Then methods
 function time_reg.do_calculation()
-        time_reg.time_speed = tonumber(minetest.setting_get("time_speed")) -- Absolute Time Speed
-        time_reg.duration = 1440 / time_reg.time_speed -- Absolute Human Speed
         local day_htime, night_htime = time_reg.duration * (time_reg.ratio.day/100), time_reg.duration * (time_reg.ratio.night/100)
-        time_reg.loop_interval = (math.min(night_htime, day_htime) / 12) * 60
         time_reg.day_time_speed = 1440 / (day_htime * 2)
         time_reg.night_time_speed = 1440 / (night_htime * 2)
 end
 
 function time_reg.seasonal_calculation()
         local year = tonumber(os.date("%Y"))
-        local nbdays = 365
+        local ylength = 365
+	if (year % 4 == 0) and ((year % 400 ~= 0 and year % 600 == 0) or (year % 600 ~= 0 and year % 400 == 0)) then
+	   ylength = 366
+	end
+
         if (year % 4) == 0 and not (year % 1000) ~= 0 then
-                nbdays = 366
+                ylength = 366
         end
-        time_reg.ratio.night = ((math.cos((time_reg.day_of_year / 1) * 2 * math.pi) * time_reg.offset) / 2.0) + 0.5
-        time_reg.ratio.day = 100 - time_reg.ratio.night
+	time_reg.ratio.night = (((math.cos((time_reg.day_of_year / ylength) * 2 * math.pi) * time_reg.offset) / 2.0) + 0.5) * 100
+	time_reg.ratio.day = 100 - time_reg.ratio.night
 
         minetest.log("action", "[TimeRegulation] Seasonal calculation done")
 end
 
 function time_reg.update_constants()
-        time_reg.time_speed = minetest.setting_get("time_speed") or time_reg.time_speed
-        time_reg.do_calculation()
+        time_reg.time_speed = minetest.setting_get("time_speed") or time_reg.time_speed -- Absolute Time Speed
+	time_reg.day_of_year = tonumber(os.date("%j"))
+
         if time_reg.status == 1 and time_reg.time_speed > 0 then
                 time_reg.set_status(2, "ACTIVE")
         end
+
+        if time_reg.status == 2 then
+	   if time_reg.seasons_mode then
+	      time_reg.seasonal_calculation() -- Calculate season-dependant ratio
+	   end
+	   time_reg.duration = 1440 / time_reg.time_speed -- Absolute Human Speed
+	   time_reg.do_calculation() -- Use ratio and time_speed to calculate time
+	   time_reg.loop_interval = (math.min(time_reg.night_time_speed / 1440, time_reg.night_time_speed / 1440) / 12) * 60
+	end
 end
 
 function time_reg.start_loop()
@@ -132,14 +143,6 @@ end
 function time_reg.loop(loop, forceupdate)
         -- Determine TOD and current moment
         local tod = minetest.get_timeofday() * 24000
-        local doy = tonumber(os.date("%j"))
-
-        if time_reg.seasons_mode then
-                if doy ~= time_reg.day_of_year then
-                        time_reg.seasonal_calculation()
-                end
-                time_reg.day_of_year = doy
-        end
 
         local moment = "day"
         if tod < time_reg.threshold.day or tod > time_reg.threshold.night then
@@ -173,6 +176,7 @@ function time_reg.loop(loop, forceupdate)
                                 minetest.log("action", "[TimeRegulation] Entering night period : time_speed " .. time_reg.night_time_speed)
                         end
                 end
+		time_reg.update_constants()
         end
 
         -- Loop if we weren't broken
@@ -181,12 +185,6 @@ function time_reg.loop(loop, forceupdate)
         else
                 minetest.log("action", "[TimeRegulation] Loop stopped")
         end
-end
-
-time_reg.update_constants()
-
-if time_reg.enabled then
-        time_reg.start_loop()
 end
 
 -- chatcommand
@@ -285,24 +283,31 @@ minetest.register_chatcommand("time_reg", {
 -- Startup informations
 local function log(x) minetest.log("action", "[TimeRegulation] " .. (x or "")) end
 
+time_reg.update_constants()
 log("Thank you for using TimeRegulation v" .. time_reg.version .. " by " .. table.concat(time_reg.authors, ", "))
 log("Status: " .. time_reg.status)
 log("Absolute Time Speed: " .. time_reg.time_speed)
 log("Duration: " .. time_reg.duration)
 log("Loop interval: " .. time_reg.loop_interval .. "s")
 if time_reg.seasons_mode then
-        time_reg.seasonal_calculation()
-        log("Seasonal ratio calculation: on")
+   log("Seasonal ratio calculation: on")
 else
-        log("Seasonal ratio calculation: off")
+   log("Seasonal ratio calculation: off")
 end
-log("Ratio:")
-log("\tDay: " .. time_reg.ratio.day .. "%")
-log("\tNight: " .. time_reg.ratio.night .. "%")
-log("Applied time speeds:")
-log("\tDay: " .. time_reg.day_time_speed)
-log("\tNight: " .. time_reg.night_time_speed)
 
 if not time_reg.enabled then
         log("Time Regulation is disabled by default. Use /time_reg start to start it")
+else
+        time_reg.start_loop()
 end
+
+minetest.after(0.5, function()
+		  log("Ratio:")
+		  log("\tDay: " .. time_reg.ratio.day .. "%")
+		  log("\tNight: " .. time_reg.ratio.night .. "%")
+		  log("Applied time speeds:")
+		  log("\tDay: " .. time_reg.day_time_speed)
+		  log("\tNight: " .. time_reg.night_time_speed)
+end)
+
+
