@@ -8,7 +8,7 @@
 
 -- Namespace first, with basic informations
 time_reg = {}
-time_reg.version = "00.01.23"
+time_reg.version = "00.01.24"
 time_reg.authors = {"Mg/LeMagnesium"}
 
 -- Definitions
@@ -58,22 +58,22 @@ end
 -- Crappy overrides
 local old_settime_func = core.chatcommands["time"].func
 core.chatcommands["time"].func = function(...)
-        local res, msg = old_settime_func(...)
-                if res and time_reg.status == time_reg.STATUS_ACTIVE then
-                time_reg.loop(false, true)
-                time_reg.log("Settime override : updating regulation")
-        end
-        return res, msg
+   local res, msg = old_settime_func(...)
+   if res and time_reg.status == time_reg.STATUS_ACTIVE then
+      time_reg.log("Settime override : updating regulation")
+      time_reg.loop(false, true)
+   end
+   return res, msg
 end
 
 local old_set_func = core.chatcommands["set"].func
 core.chatcommands["set"].func = function(...)
-        local res, msg = old_set_func(...)
-        if res and time_reg.status ~= time_reg.STATUS_DEAD then
-	   time_reg.loop(false, true)
-	   time_reg.log("Set override : updating constants and regulation")
-        end
-        return res, msg
+   local res, msg = old_set_func(...)
+   if res and time_reg.status ~= time_reg.STATUS_DEAD and tonumber(minetest.setting_get("time_speed")) ~= time_reg.time_speed then
+      time_reg.log("Set override : updating constants and regulation")
+      time_reg.update_constants({time_speed = true})
+   end
+   return res, msg
 end
 
 
@@ -86,9 +86,11 @@ function time_reg.log(x) minetest.log("action", "[TimeRegulation] " .. (x or "")
 -- Standard calculation function
 --	Function used when performing calculation of standard method (meaning that we already have the ratio)
 function time_reg.std_calculation()
-        local day_htime, night_htime = time_reg.duration * (time_reg.ratio.day/100), time_reg.duration * (time_reg.ratio.night/100)
-        time_reg.day_time_speed = 1440 / (day_htime)
-        time_reg.night_time_speed = 1440 / (night_htime)
+   time_reg.log("Calculation using time_speed = " .. time_reg.time_speed)
+   local day_htime, night_htime = time_reg.duration * (time_reg.ratio.day/100), time_reg.duration * (time_reg.ratio.night/100)
+   time_reg.day_time_speed = 1440 / (day_htime)
+   time_reg.night_time_speed = 1440 / (night_htime)
+   time_reg.log("Output is : " .. time_reg.day_time_speed .. " (day); " .. time_reg.night_time_speed .. " (night)")
 end
 
 -- Seasonal calculation function
@@ -107,28 +109,46 @@ function time_reg.seasonal_calculation()
 end
 
 -- Constants update function
---	Global constant update function which determines what calculation method to use
-function time_reg.update_constants()
-        time_reg.time_speed = minetest.setting_get("time_speed") or time_reg.time_speed -- Absolute Time Speed
-	if time_reg.real_life_seasons then
-		time_reg.day_of_year = tonumber(os.date("%j"))
-	else
-		time_reg.day_of_year = minetest.get_day_count()
-	end
+--	Global constant update used to update calculation values
+--	It needs a parameter, a table with key/value elements. The following keys are available :
+--		- time_speed : true to update time_speed
+--		- date : true to update the current date from either the game or real life
+function time_reg.update_constants(tab)
+   if tab.time_speed then
+      -- Updating time_speed should only be done when booting, or after an update of time_speed's value in MT's configuration
+      time_reg.time_speed = tonumber(minetest.setting_get("time_speed")) or time_reg.time_speed -- Absolute Time Speed
+      time_reg.duration = 1440 / time_reg.time_speed -- Absolute Human Speed
 
-        if time_reg.status == time_reg.STATUS_IDLE and time_reg.time_speed > 0 then
-                time_reg.set_status(time_reg.STATUS_ACTIVE, "ACTIVE")
-        end
+      if time_reg.status == time_reg.STATUS_IDLE and time_reg.time_speed > 0 then
+	 time_reg.start_loop()
+      elseif time_reg.status == time_reg.STATUS_ACTIVE and time_reg.time_speed == 0 then
+	 time_reg.stop_loop()
+      else
+	 time_reg.loop(false)
+      end
+   end
 
-        if time_reg.status == time_reg.STATUS_ACTIVE then
-	   if time_reg.seasons_mode then
-	      time_reg.seasonal_calculation() -- Calculate season-dependant ratio
-	   end
-	   time_reg.duration = 1440 / time_reg.time_speed -- Absolute Human Speed
-	   time_reg.std_calculation() -- Use ratio and time_speed to calculate time
-	   time_reg.loop_interval = math.min(1440 / time_reg.night_time_speed, 1440 / time_reg.night_time_speed) * 60
-	end
+   if tab.date then
+      if time_reg.real_life_seasons then
+	 time_reg.day_of_year = tonumber(os.date("%j"))
+      else
+	 time_reg.day_of_year = minetest.get_day_count()
+      end
+      -- Since we (hypothetically) changed the current day we compute again our seasonal rations
+      if time_reg.seasons_mode then
+	 time_reg.seasonal_calculation() -- Calculate season-dependant ratio
+      end
+   end
 end
+
+-- Central computing function
+--	A computing function separated from update_constants, for clarity's sake
+function time_reg.compute()
+   if time_reg.status == time_reg.STATUS_ACTIVE then
+      time_reg.std_calculation() -- Use ratio and time_speed to calculate time
+      time_reg.loop_interval = math.min(1440 / time_reg.night_time_speed, 1440 / time_reg.night_time_speed) * 30 -- (not 60, we only want half of it)
+   end
+end	
 
 -- Start the Loop
 --	Launch the Loop with the order to repeat itself indefinitely
@@ -138,9 +158,10 @@ function time_reg.start_loop()
                 return false
         end
         time_reg.loop_active = true
+	time_reg.set_status(time_reg.STATUS_ACTIVE, "ACTIVE")
+	time_reg.loop(true)
         time_reg.log("Loop started")
-        time_reg.loop(true)
-        return true
+	return true
 end
 
 -- Stop the Loop
@@ -164,18 +185,24 @@ end
 
 -- And the loop
 function time_reg.loop(loop, forceupdate)
+	if not loop then
+	   time_reg.log("Loop running as standalone")
+	end
+
    	-- Do all calculations
-   	time_reg.update_constants()
+	time_reg.update_constants({date = true})
+	time_reg.compute()
+	if not time_reg.loop_active then
+	   time_reg.set_status(time_reg.STATUS_IDLE, "IDLE")
+	   time_reg.log("Loop broken")
+	   return
+	end
+
         local tod = minetest.get_timeofday() * 24000
 
         local moment = "day"
         if tod < time_reg.threshold.day or tod > time_reg.threshold.night then
                 moment = "night"
-        end
-
-        if time_reg.time_speed == 0 then
-                time_reg.set_status(time_reg.STATUS_IDLE, "IDLE")
-                return
         end
 
         -- Update if threshold reached
@@ -234,7 +261,6 @@ minetest.register_chatcommand("time_reg", {
                         local res = time_reg.start_loop()
                         if res then
                                 time_reg.set_status(time_reg.STATUS_ACTIVE, "ACTIVE")
-                                time_reg.update_constants()
                                 return true, "Loop started. Time regulation enabled"
                         else
                                 return false, "Loop couldn't be started, it already is"
@@ -269,7 +295,7 @@ minetest.register_chatcommand("time_reg", {
                                 return false, "Invalid moment of the day : " .. moment .. ". Use either 'day' or 'night'"
                         end
 
-                        time_reg.update_constants()
+                        time_reg.compute()
                         time_reg.loop(false, true)
                         return true, "Operation succeeded.\nRatio: " .. time_reg.ratio.day .. "% day and " .. time_reg.ratio.night .. "% night"
 
