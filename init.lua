@@ -3,12 +3,12 @@
 -- By Mg/LeMagnesium
 -- License: WTFPL
 -- Last modification :
--- 05/12/16 @ 12:20PM GMT+1 (Mg)
+-- 05/16/16 @ 02:14PM GMT+1 (Mg)
 --
 
 -- Namespace first, with basic informations
 time_reg = {}
-time_reg.version = "00.01.24"
+time_reg.version = "00.01.25"
 time_reg.authors = {"Mg/LeMagnesium"}
 
 -- Definitions
@@ -366,6 +366,15 @@ function time_reg.init()
    time_reg.log("\tDay: " .. 1440 / time_reg.day_time_speed .. " minutes")
    time_reg.log("\tNight: " .. 1440 / time_reg.night_time_speed .. " minutes")
 end
+
+-- Shutdown
+-- 	Sometimes MT will shutdown and write current time_speed in minetest.conf; we need to change the value back to normal before it happens
+function time_reg.on_shutdown()
+	minetest.setting_set("time_speed", time_reg.time_speed)
+	time_reg.log("Time speed set back to " .. time_reg.time_speed)
+end
+
+minetest.register_on_shutdown(time_reg.on_shutdown)
 
 -- --[[ NOW WE SHALL START ]]-- --
 
