@@ -3,12 +3,12 @@
 -- By Mg/LeMagnesium
 -- License: WTFPL
 -- Last modification :
--- 05/16/16 @ 02:14PM GMT+1 (Mg)
+-- 05/18/16 @ 05:20PM GMT+1 (Mg)
 --
 
 -- Namespace first, with basic informations
 time_reg = {}
-time_reg.version = "00.01.25"
+time_reg.version = "00.01.26"
 time_reg.authors = {"Mg/LeMagnesium"}
 
 -- Definitions
@@ -88,8 +88,8 @@ function time_reg.log(x) minetest.log("action", "[TimeRegulation] " .. (x or "")
 function time_reg.std_calculation()
    time_reg.log("Calculation using time_speed = " .. time_reg.time_speed)
    local day_htime, night_htime = time_reg.duration * (time_reg.ratio.day/100), time_reg.duration * (time_reg.ratio.night/100)
-   time_reg.day_time_speed = 1440 / (day_htime)
-   time_reg.night_time_speed = 1440 / (night_htime)
+   time_reg.day_time_speed = 1440 / day_htime / 2 -- Human times are divided per two since we only span half a cycle for each period of a day
+   time_reg.night_time_speed = 1440 / night_htime / 2
    time_reg.log("Output is : " .. time_reg.day_time_speed .. " (day); " .. time_reg.night_time_speed .. " (night)")
 end
 
@@ -146,7 +146,7 @@ end
 function time_reg.compute()
    if time_reg.status == time_reg.STATUS_ACTIVE then
       time_reg.std_calculation() -- Use ratio and time_speed to calculate time
-      time_reg.loop_interval = math.min(1440 / time_reg.night_time_speed, 1440 / time_reg.night_time_speed) * 30 -- (not 60, we only want half of it)
+      time_reg.loop_interval = math.min(1440 / time_reg.night_time_speed / 2, 1440 / time_reg.night_time_speed / 2) * 30 -- (not 60, we only want half of it)
    end
 end	
 
@@ -158,7 +158,9 @@ function time_reg.start_loop()
                 return false
         end
         time_reg.loop_active = true
-	time_reg.set_status(time_reg.STATUS_ACTIVE, "ACTIVE")
+	if time_reg.status ~= time_reg.STATUS_ACTIVE then
+		time_reg.set_status(time_reg.STATUS_ACTIVE, "ACTIVE")
+	end
 	time_reg.loop(true)
         time_reg.log("Loop started")
 	return true
@@ -362,9 +364,9 @@ function time_reg.init()
    time_reg.log("Applied time speeds:")
    time_reg.log("\tDay: " .. time_reg.day_time_speed)
    time_reg.log("\tNight: " .. time_reg.night_time_speed)
-   time_reg.log("Human Durations:")
-   time_reg.log("\tDay: " .. 1440 / time_reg.day_time_speed .. " minutes")
-   time_reg.log("\tNight: " .. 1440 / time_reg.night_time_speed .. " minutes")
+   time_reg.log("Human Durations of Half-Cycles:")
+   time_reg.log("\tDay: " .. 1440 / time_reg.day_time_speed / 2 .. " minutes")
+   time_reg.log("\tNight: " .. 1440 / time_reg.night_time_speed / 2 .. " minutes")
 end
 
 -- Shutdown
