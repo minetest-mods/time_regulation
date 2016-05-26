@@ -60,7 +60,7 @@ local old_settime_func = core.chatcommands["time"].func
 core.chatcommands["time"].func = function(...)
    local res, msg = old_settime_func(...)
    if res and time_reg.status == time_reg.STATUS_ACTIVE then
-      time_reg.log("Settime override : updating regulation")
+      time_reg.log("Settime override : updating regulation", "verbose")
       time_reg.loop(false, true)
    end
    return res, msg
@@ -70,7 +70,7 @@ local old_set_func = core.chatcommands["set"].func
 core.chatcommands["set"].func = function(...)
    local res, msg = old_set_func(...)
    if res and time_reg.status ~= time_reg.STATUS_DEAD and tonumber(minetest.setting_get("time_speed")) ~= time_reg.time_speed then
-      time_reg.log("Set override : updating constants and regulation")
+      time_reg.log("Set override : updating constants and regulation", "verbose")
       time_reg.update_constants({time_speed = true})
    end
    return res, msg
@@ -81,16 +81,16 @@ end
 
 -- Information functions
 -- 	Function meant to be an alias to minetest.log("action", "[TimeRegulation] " + parameters)
-function time_reg.log(x) minetest.log("action", "[TimeRegulation] " .. (x or "")) end
+function time_reg.log(x, ...) minetest.log(... or "action", "[TimeRegulation] " .. (x or "")) end
 
 -- Standard calculation function
 --	Function used when performing calculation of standard method (meaning that we already have the ratio)
 function time_reg.std_calculation()
-   time_reg.log("Calculation using time_speed = " .. time_reg.time_speed)
+   time_reg.log("Calculation using time_speed = " .. time_reg.time_speed, "verbose")
    local day_htime, night_htime = time_reg.duration * (time_reg.ratio.day/100), time_reg.duration * (time_reg.ratio.night/100)
    time_reg.day_time_speed = 1440 / day_htime / 2 -- Human times are divided per two since we only span half a cycle for each period of a day
    time_reg.night_time_speed = 1440 / night_htime / 2
-   time_reg.log("Output is : " .. time_reg.day_time_speed .. " (day); " .. time_reg.night_time_speed .. " (night)")
+   time_reg.log("Output is : " .. time_reg.day_time_speed .. " (day); " .. time_reg.night_time_speed .. " (night)", "verbose")
 end
 
 -- Seasonal calculation function
@@ -105,7 +105,7 @@ function time_reg.seasonal_calculation()
 	time_reg.ratio.night = (((math.cos((time_reg.day_of_year / ylength) * 2 * math.pi) * time_reg.offset) / 2.0) + 0.5) * 100
 	time_reg.ratio.day = 100 - time_reg.ratio.night
 
-        time_reg.log("Seasonal calculation done")
+        time_reg.log("Seasonal calculation done", "verbose")
 end
 
 -- Constants update function
@@ -154,7 +154,7 @@ end
 --	Launch the Loop with the order to repeat itself indefinitely
 function time_reg.start_loop()
         if time_reg.loop_active then
-                time_reg.log("Will not start the loop : one is already running")
+                time_reg.log("Will not start the loop : one is already running", "error")
                 return false
         end
         time_reg.loop_active = true
@@ -162,7 +162,7 @@ function time_reg.start_loop()
 		time_reg.set_status(time_reg.STATUS_ACTIVE, "ACTIVE")
 	end
 	time_reg.loop(true)
-        time_reg.log("Loop started")
+        time_reg.log("Loop started", "verbose")
 	return true
 end
 
@@ -170,25 +170,25 @@ end
 --	Break the Loop by setting time_reg.loop_active to false, unless it isn't running
 function time_reg.stop_loop()
         if not time_reg.loop_active then
-                time_reg.log("Will not break the loop : no loop running")
+                time_reg.log("Will not break the loop : no loop running", "error")
                 return false
         end
         time_reg.loop_active = false
-        time_reg.log("Loop asked to stop")
+        time_reg.log("Loop asked to stop", "verbose")
         return true
 end
 
 -- Set status
 --	Set the mechanism's current status (an integer, and a title)
 function time_reg.set_status(x, title)
-        time_reg.log("Entered status " .. x .. " (" .. title .. ")")
+        time_reg.log("Entered status " .. x .. " (" .. title .. ")", "info")
         time_reg.status = x
 end
 
 -- And the loop
 function time_reg.loop(loop, forceupdate)
 	if not loop then
-	   time_reg.log("Loop running as standalone")
+	   time_reg.log("Loop running as standalone", "verbose")
 	end
 
    	-- Do all calculations
@@ -196,7 +196,7 @@ function time_reg.loop(loop, forceupdate)
 	time_reg.compute()
 	if not time_reg.loop_active then
 	   time_reg.set_status(time_reg.STATUS_IDLE, "IDLE")
-	   time_reg.log("Loop broken")
+	   time_reg.log("Loop broken", "error")
 	   return
 	end
 
@@ -215,18 +215,18 @@ function time_reg.loop(loop, forceupdate)
                 if moment == "day" then
                         if time_reg.ratio.day == 0 then
                                 minetest.set_timeofday(time_reg.threshold.night / 24000)
-                                time_reg.log("Entering day period : period skipped")
+                                time_reg.log("Entering day period : period skipped", "info")
                         else
                                 minetest.setting_set("time_speed", time_reg.day_time_speed)
-                                time_reg.log("Entering day period : time_speed " .. time_reg.day_time_speed)
+                                time_reg.log("Entering day period : time_speed " .. time_reg.day_time_speed, "info")
                         end
                 else
                         if time_reg.ratio.night == 0 then
                                 minetest.set_timeofday(time_reg.threshold.day / 24000)
-                                time_reg.log("Entering night period : period skipped")
+                                time_reg.log("Entering night period : period skipped", "info")
                         else
                                 minetest.setting_set("time_speed", time_reg.night_time_speed)
-                                time_reg.log("Entering night period : time_speed " .. time_reg.night_time_speed)
+                                time_reg.log("Entering night period : time_speed " .. time_reg.night_time_speed, "info")
                         end
                 end
         end
@@ -235,7 +235,7 @@ function time_reg.loop(loop, forceupdate)
         if loop then
                 minetest.after(time_reg.loop_interval, time_reg.loop, time_reg.loop_active)
         else
-                time_reg.log("Loop stopped")
+                time_reg.log("Loop stopped", "verbose")
         end
 end
 
@@ -342,47 +342,47 @@ function time_reg.init()
    if time_reg.seasons_mode then
       time_reg.log("Seasonal ratio calculation: on")
       if time_reg.real_life_seasons then
-	 time_reg.log("Seasonal ratio calculated from real life date")
+	 time_reg.log("Seasonal ratio calculated from real life date", "info")
       else
-	 time_reg.log("Seasonal ratio calculated from game date")
+	 time_reg.log("Seasonal ratio calculated from game date", "info")
       end
    else
-      time_reg.log("Seasonal ratio calculation: off")
+      time_reg.log("Seasonal ratio calculation: off", "info")
    end
 
    if not time_reg.enabled then
-      time_reg.log("Time Regulation is disabled by default. Use /time_reg start to start it")
+      time_reg.log("Time Regulation is disabled by default. Use /time_reg start to start it", "action")
    else
       time_reg.start_loop()
    end
 
-   time_reg.log("Duration: " .. time_reg.duration .. " minutes")
-   time_reg.log("Loop interval: " .. time_reg.loop_interval .. "s")
-   time_reg.log("Ratio:")
-   time_reg.log("\tDay: " .. time_reg.ratio.day .. "%")
-   time_reg.log("\tNight: " .. time_reg.ratio.night .. "%")
-   time_reg.log("Applied time speeds:")
-   time_reg.log("\tDay: " .. time_reg.day_time_speed)
-   time_reg.log("\tNight: " .. time_reg.night_time_speed)
-   time_reg.log("Human Durations of Half-Cycles:")
-   time_reg.log("\tDay: " .. 1440 / time_reg.day_time_speed / 2 .. " minutes")
-   time_reg.log("\tNight: " .. 1440 / time_reg.night_time_speed / 2 .. " minutes")
+   time_reg.log("Duration: " .. time_reg.duration .. " minutes", "verbose")
+   time_reg.log("Loop interval: " .. time_reg.loop_interval .. "s", "verbose")
+   time_reg.log("Ratio:", "verbose")
+   time_reg.log("\tDay: " .. time_reg.ratio.day .. "%", "verbose")
+   time_reg.log("\tNight: " .. time_reg.ratio.night .. "%", "verbose")
+   time_reg.log("Applied time speeds:", "verbose")
+   time_reg.log("\tDay: " .. time_reg.day_time_speed, "verbose")
+   time_reg.log("\tNight: " .. time_reg.night_time_speed, "verbose")
+   time_reg.log("Human Durations of Half-Cycles:", "verbose")
+   time_reg.log("\tDay: " .. 1440 / time_reg.day_time_speed / 2 .. " minutes", "verbose")
+   time_reg.log("\tNight: " .. 1440 / time_reg.night_time_speed / 2 .. " minutes", "verbose")
 end
 
 -- Shutdown
 -- 	Sometimes MT will shutdown and write current time_speed in minetest.conf; we need to change the value back to normal before it happens
 function time_reg.on_shutdown()
 	minetest.setting_set("time_speed", time_reg.time_speed)
-	time_reg.log("Time speed set back to " .. time_reg.time_speed)
+	time_reg.log("Time speed set back to " .. time_reg.time_speed, "verbose")
 end
 
 minetest.register_on_shutdown(time_reg.on_shutdown)
 
 -- --[[ NOW WE SHALL START ]]-- --
 
-time_reg.log("Thank you for using TimeRegulation v" .. time_reg.version .. " by " .. table.concat(time_reg.authors, ", "))
-time_reg.log("Status: " .. time_reg.status)
-time_reg.log("Absolute Time Speed: " .. time_reg.time_speed)
+time_reg.log("Thank you for using TimeRegulation v" .. time_reg.version .. " by " .. table.concat(time_reg.authors, ", "), "info")
+time_reg.log("Status: " .. time_reg.status, "info")
+time_reg.log("Absolute Time Speed: " .. time_reg.time_speed, "verbose")
 
 minetest.after(0.1, time_reg.init)
 
