@@ -57,13 +57,13 @@ end
 
 -- Crappy overrides
 local old_settime_func = core.chatcommands["time"].func
-core.chatcommands["time"].func = function(...)
-   local res, msg = old_settime_func(...)
-   if res and time_reg.status == time_reg.STATUS_ACTIVE then
-      time_reg.log("Settime override : updating regulation", "verbose")
-      time_reg.loop(false, true)
-   end
-   return res, msg
+core.chatcommands["time"].func = function(name, params)
+	local res, msg = old_settime_func(name, params)
+	if params ~= "" and res and time_reg.status == time_reg.STATUS_ACTIVE then
+		time_reg.log("Settime override : updating regulation", "verbose")
+		time_reg.loop(false, true)
+	end
+	return res, msg
 end
 
 local old_set_func = core.chatcommands["set"].func
