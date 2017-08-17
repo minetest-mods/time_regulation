@@ -12,9 +12,9 @@ time_reg.version = "00.01.26"
 time_reg.authors = {"Mg/LeMagnesium"}
 
 -- Definitions
-time_reg.enabled = not (minetest.setting_getbool("disable_time_regulation") or false)
-time_reg.seasons_mode = minetest.setting_getbool("seasonal_time_regulation") or false
-time_reg.real_life_seasons = minetest.setting_getbool("use_real_life_seasons") or false
+time_reg.enabled = not (minetest.settings:get_bool("disable_time_regulation") or false)
+time_reg.seasons_mode = minetest.settings:get_bool("seasonal_time_regulation") or false
+time_reg.real_life_seasons = minetest.settings:get_bool("use_real_life_seasons") or false
 time_reg.offset = 0.5
 
 if time_reg.real_life_seasons then
@@ -23,7 +23,7 @@ else
 	time_reg.day_of_year = 0 -- Updated at first update_constants
 end
 
-time_reg.time_speed = tonumber(minetest.setting_get("time_speed") or "72")
+time_reg.time_speed = tonumber(minetest.settings:get("time_speed") or "72")
 
 time_reg.loop_interval = 0
 time_reg.loop_active = false
@@ -47,8 +47,8 @@ time_reg.STATUS_DEAD, time_reg.STATUS_BOOTING, time_reg.STATUS_IDLE, time_reg.ST
 time_reg.status = time_reg.STATUS_BOOTING
 
 time_reg.ratio = { -- Expressed in percent
-        day = tonumber(minetest.setting_get("day_time_ratio")) or 50,
-        night = tonumber(minetest.setting_get("night_time_ratio")) or 50,
+        day = tonumber(minetest.settings:get("day_time_ratio")) or 50,
+        night = tonumber(minetest.settings:get("night_time_ratio")) or 50,
 }
 if (time_reg.ratio.day + time_reg.ratio.night ~= 100) or time_reg.ratio.day < 0 or time_reg.ratio.night < 0 then
         minetest.log("error", ("[TimeRegulation] Invalid ratio : %d/100 day & %d/100 night. Setting to 50/50"):format(time_reg.ratio.day, time_reg.ratio.night))
@@ -69,7 +69,7 @@ end
 local old_set_func = core.chatcommands["set"].func
 core.chatcommands["set"].func = function(...)
    local res, msg = old_set_func(...)
-   if res and time_reg.status ~= time_reg.STATUS_DEAD and tonumber(minetest.setting_get("time_speed")) ~= time_reg.time_speed then
+   if res and time_reg.status ~= time_reg.STATUS_DEAD and tonumber(minetest.settings:get("time_speed")) ~= time_reg.time_speed then
       time_reg.log("Set override : updating constants and regulation", "verbose")
       time_reg.update_constants({time_speed = true})
    end
@@ -116,7 +116,7 @@ end
 function time_reg.update_constants(tab)
    if tab.time_speed then
       -- Updating time_speed should only be done when booting, or after an update of time_speed's value in MT's configuration
-      time_reg.time_speed = tonumber(minetest.setting_get("time_speed")) or time_reg.time_speed -- Absolute Time Speed
+      time_reg.time_speed = tonumber(minetest.settings:get("time_speed")) or time_reg.time_speed -- Absolute Time Speed
       time_reg.duration = 1440 / time_reg.time_speed -- Absolute Human Speed
 
       if time_reg.status == time_reg.STATUS_IDLE and time_reg.time_speed > 0 then
@@ -217,7 +217,7 @@ function time_reg.loop(loop, forceupdate)
                                 minetest.set_timeofday(time_reg.threshold.night / 24000)
                                 time_reg.log("Entering day period : period skipped", "info")
                         else
-                                minetest.setting_set("time_speed", time_reg.day_time_speed)
+                                minetest.settings:set("time_speed", time_reg.day_time_speed)
                                 time_reg.log("Entering day period : time_speed " .. time_reg.day_time_speed, "info")
                         end
                 else
@@ -225,7 +225,7 @@ function time_reg.loop(loop, forceupdate)
                                 minetest.set_timeofday(time_reg.threshold.day / 24000)
                                 time_reg.log("Entering night period : period skipped", "info")
                         else
-                                minetest.setting_set("time_speed", time_reg.night_time_speed)
+                                minetest.settings:set("time_speed", time_reg.night_time_speed)
                                 time_reg.log("Entering night period : time_speed " .. time_reg.night_time_speed, "info")
                         end
                 end
@@ -372,7 +372,7 @@ end
 -- Shutdown
 -- 	Sometimes MT will shutdown and write current time_speed in minetest.conf; we need to change the value back to normal before it happens
 function time_reg.on_shutdown()
-	minetest.setting_set("time_speed", time_reg.time_speed)
+	minetest.settings:set("time_speed", time_reg.time_speed)
 	time_reg.log("Time speed set back to " .. time_reg.time_speed, "verbose")
 end
 
